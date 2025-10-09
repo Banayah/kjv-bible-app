@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+// src/hooks/useBibleApi.ts
+import { useState } from "react";
+import { supabase } from "../lib/supabase";
 
 interface Verse {
   book: string;
@@ -6,64 +8,6 @@ interface Verse {
   verse: number;
   text: string;
 }
-
-// Mock Bible data - replace this with your actual API calls
-const mockVerses: { [key: string]: Verse[] } = {
-  "Genesis_1": [
-    {
-      book: "Genesis",
-      chapter: 1,
-      verse: 1,
-      text: "In the beginning God created the heavens and the earth."
-    },
-    {
-      book: "Genesis",
-      chapter: 1,
-      verse: 2,
-      text: "Now the earth was formless and empty, darkness was over the surface of the deep, and the Spirit of God was hovering over the waters."
-    },
-    {
-      book: "Genesis",
-      chapter: 1,
-      verse: 3,
-      text: "And God said, 'Let there be light,' and there was light."
-    }
-  ],
-  "John_3": [
-    {
-      book: "John",
-      chapter: 3,
-      verse: 16,
-      text: "For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life."
-    },
-    {
-      book: "John",
-      chapter: 3,
-      verse: 17,
-      text: "For God did not send his Son into the world to condemn the world, but to save the world through him."
-    }
-  ],
-  "Psalms_23": [
-    {
-      book: "Psalms",
-      chapter: 23,
-      verse: 1,
-      text: "The Lord is my shepherd, I lack nothing."
-    },
-    {
-      book: "Psalms",
-      chapter: 23,
-      verse: 2,
-      text: "He makes me lie down in green pastures, he leads me beside quiet waters."
-    },
-    {
-      book: "Psalms",
-      chapter: 23,
-      verse: 3,
-      text: "He refreshes my soul. He guides me along the right paths for his name's sake."
-    }
-  ]
-};
 
 export function useBibleApi() {
   const [verses, setVerses] = useState<Verse[]>([]);
@@ -73,72 +17,75 @@ export function useBibleApi() {
   const fetchChapter = async (book: string, chapter: number) => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Replace this with your actual API call
-      // const response = await fetch(`YOUR_API_ENDPOINT/books/${book}/chapters/${chapter}`);
-      // const data = await response.json();
-      
-      const key = `${book}_${chapter}`;
-      const mockData = mockVerses[key] || [];
-      
-      if (mockData.length === 0) {
-        // Generate some mock verses for demonstration
-        const generatedVerses: Verse[] = Array.from({ length: 10 }, (_, i) => ({
-          book,
-          chapter,
-          verse: i + 1,
-          text: `This is verse ${i + 1} from ${book} chapter ${chapter}. Replace this with your actual API data.`
-        }));
-        setVerses(generatedVerses);
-      } else {
-        setVerses(mockData);
+      const { data, error: supabaseError } = await supabase
+        .from("bible_books_and_verses")
+        .select("book_name, book_chapter, verse_number, verse_text")
+        .eq("book_name", book)
+        .eq("book_chapter", chapter)
+        .order("verse_number");
+
+      if (supabaseError) {
+        throw supabaseError;
       }
+
+      // Transform Supabase data to match your app's Verse interface
+      const transformedVerses: Verse[] = (data || []).map((v) => ({
+        book: v.book_name,
+        chapter: v.book_chapter,
+        verse: v.verse_number,
+        text: v.verse_text,
+      }));
+
+      setVerses(transformedVerses);
     } catch (err) {
-      setError("Failed to fetch verses");
-      setVerses([]);
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch chapter"
+      );
+      console.error("Error fetching chapter:", err);
     } finally {
       setLoading(false);
     }
   };
 
   const searchVerses = async (query: string) => {
+    if (!query.trim()) {
+      setVerses([]);
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Replace this with your actual search API call
-      // const response = await fetch(`YOUR_API_ENDPOINT/search?q=${encodeURIComponent(query)}`);
-      // const data = await response.json();
-      
-      // Mock search results
-      const allVerses = Object.values(mockVerses).flat();
-      const searchResults = allVerses.filter(verse => 
-        verse.text.toLowerCase().includes(query.toLowerCase())
-      );
-      
-      if (searchResults.length === 0 && query.trim()) {
-        // Generate mock search results for demonstration
-        setVerses([
-          {
-            book: "Matthew",
-            chapter: 5,
-            verse: 14,
-            text: `Search results for "${query}" would appear here. Replace with your actual search API.`
-          }
-        ]);
-      } else {
-        setVerses(searchResults);
+      const { data, error: supabaseError } = await supabase
+        .from("bible_books_and_verses")
+        .select("book_name, book_chapter, verse_number, verse_text")
+        .ilike("verse_text", `%${query}%`)
+        .limit(100)
+        .order("book_name")
+        .order("book_chapter")
+        .order("verse_number");
+
+      if (supabaseError) {
+        throw supabaseError;
       }
+
+      // Transform Supabase data to match your app's Verse interface
+      const transformedVerses: Verse[] = (data || []).map((v) => ({
+        book: v.book_name,
+        chapter: v.book_chapter,
+        verse: v.verse_number,
+        text: v.verse_text,
+      }));
+
+      setVerses(transformedVerses);
     } catch (err) {
-      setError("Failed to search verses");
-      setVerses([]);
+      setError(
+        err instanceof Error ? err.message : "Failed to search verses"
+      );
+      console.error("Error searching verses:", err);
     } finally {
       setLoading(false);
     }
@@ -149,6 +96,6 @@ export function useBibleApi() {
     loading,
     error,
     fetchChapter,
-    searchVerses
+    searchVerses,
   };
 }
